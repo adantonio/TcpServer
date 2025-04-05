@@ -43,7 +43,7 @@ namespace Tester
             }
         }
 
-        private async void ReceiveData(TcpClient client, CancellationToken cancellationToken)
+        private async Task ReceiveData(TcpClient client, CancellationToken cancellationToken)
         {
             try
             {
@@ -91,10 +91,10 @@ namespace Tester
             }
         }
 
-        private void HandleClient(TcpClient client, CancellationToken cancellationToken)
+        private async void HandleClient(TcpClient client, CancellationToken cancellationToken)
         {
             InitializeClientBuffer(client);
-            ReceiveData(client, cancellationToken);
+            await ReceiveData(client, cancellationToken);
             RemoveClientBuffer(client.Client.Handle);
         }
 
