@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 
@@ -6,12 +7,23 @@ namespace Tester
 {
     public class TcpServer
     {
-        private Hashtable clientBuffer = [];
+        public class MessageReceivedEventArgs : EventArgs
+        {
+            public string Message { get; }
+            public MessageReceivedEventArgs(string message)
+            {
+                Message = message;
+            }
+        }
+
+        private ConcurrentDictionary<nint, string?> clientBuffer = new();
         private CancellationTokenSource cancellationToken = new();
 
         public event EventHandler OnConnected = delegate (object? sender, EventArgs e) { };
         public event EventHandler OnDisconnected = delegate (object? sender, EventArgs e) { };
         public event EventHandler OnError = delegate (object? sender, EventArgs e) { };
+        public event EventHandler OnReceived = delegate (object? sender, EventArgs e) { };
+        public event EventHandler OnStopped = delegate (object? sender, EventArgs e) { };
 
         private void InitializeClientBuffer(TcpClient client)
         {
@@ -20,7 +32,7 @@ namespace Tester
                 nint key = client.Client.Handle;
                 if (!clientBuffer.ContainsKey(key))
                 {
-                    clientBuffer.Add(key, null);
+                    clientBuffer.AddOrUpdate(key, (nint _) => null, (_, _) => null);
                 }
                 else
                 {
@@ -29,7 +41,7 @@ namespace Tester
             }
             catch (Exception ex)
             {
-                OnError?.Invoke(this, new ErrorEventArgs(ex.Message));
+                OnError?.Invoke(this, new ErrorEventArgs(ex));
                 client.Close();
             }
         }
@@ -48,15 +60,22 @@ namespace Tester
                         string message = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
                         lock (clientBuffer)
                         {
-                            if (clientBuffer[client.Client.Handle] is null)
+                            nint key = client.Client.Handle;
+                            clientBuffer.AddOrUpdate(key, message, (_, exisitingValue) =>
                             {
-                                clientBuffer[client.Client.Handle] = message;
-                            }
-                            else
-                            {
-                                clientBuffer[client.Client.Handle] += message;
-                            }
+                                if (exisitingValue is null)
+                                {
+                                    return message;
+                                }
+                                else
+                                {
+                                    message = exisitingValue + message;
+                                    return message;
+
+                                }
+                            });
                         }
+                        OnReceived?.Invoke(this, new MessageReceivedEventArgs(message));
                     }
                 }
             }
@@ -77,7 +96,7 @@ namespace Tester
             {
                 if (clientBuffer.ContainsKey(handle))
                 {
-                    clientBuffer.Remove(handle);
+                    clientBuffer.Remove(handle, out _);
                 }
             }
         }
@@ -108,7 +127,10 @@ namespace Tester
                         }
                     });
                 }
-            }, cancellationToken.Token);
+            }, cancellationToken.Token).ContinueWith((task) =>
+            {
+                OnStopped?.Invoke(this, EventArgs.Empty);
+            });
         }
 
         public void Stop()
