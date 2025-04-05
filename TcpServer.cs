@@ -4,15 +4,6 @@ using System.Net.Sockets;
 
 namespace Tester
 {
-    public class ErrorEventArgs : EventArgs
-    {
-        public string ErrorMessage { get; set; }
-        public ErrorEventArgs(string errorMessage)
-        {
-            ErrorMessage = errorMessage;
-        }
-    }
-
     public class TcpServer
     {
         private Hashtable clientBuffer = [];
@@ -71,7 +62,7 @@ namespace Tester
             }
             catch (Exception ex)
             {
-                OnError?.Invoke(this, new ErrorEventArgs(ex.Message));
+                OnError?.Invoke(this, new ErrorEventArgs(ex));
                 client.Close();
             }
             finally
